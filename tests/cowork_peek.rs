@@ -8,7 +8,9 @@
 //! real ~/.claude or ~/.codex directories — `home_override` on PeekRequest
 //! injects a tempdir as the resolved HOME.
 
-use mempal::cowork::{PeekError, PeekRequest, Tool, peek_partner};
+use mempal::cowork::{
+    PeekError, PeekPlanFinalizeStatus, PeekPlanWriteStatus, PeekRequest, Tool, peek_partner,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -85,6 +87,24 @@ fn build_fake_home(cwd: &Path) -> (TempDir, PathBuf) {
     .unwrap();
 
     (tmp, home)
+}
+
+fn overwrite_claude_session_with_plan_fixture(home: &Path, cwd: &Path) {
+    let encoded = cwd.to_string_lossy().replace('/', "-");
+    let claude_dir = home.join(".claude/projects").join(encoded);
+    fs::create_dir_all(&claude_dir).unwrap();
+    let session = format!(
+        r##"{{"type":"permission-mode","permissionMode":"plan","sessionId":"abc-123"}}
+{{"parentUuid":"session","isSidechain":false,"attachment":{{"type":"plan_mode","reminderType":"full","isSubAgent":false,"planFilePath":"/Users/example/.claude/plans/example-plan.md","planExists":false}},"type":"attachment","uuid":"plan_mode_1","timestamp":"2026-04-13T10:00:00Z","cwd":"{cwd}"}}
+{{"parentUuid":"plan_mode_1","isSidechain":false,"type":"assistant","message":{{"role":"assistant","content":[{{"type":"text","text":"I have enough context. I am writing the plan file now."}},{{"type":"tool_use","id":"tool_write_1","name":"Write","input":{{"file_path":"/Users/example/.claude/plans/example-plan.md","content":"# Example plan"}}}}]}},"uuid":"assistant_write","timestamp":"2026-04-13T10:00:05Z","cwd":"{cwd}"}}
+{{"parentUuid":"assistant_write","isSidechain":false,"promptId":"prompt-1","type":"user","message":{{"role":"user","content":[{{"tool_use_id":"tool_write_1","type":"tool_result","content":"File created successfully at: /Users/example/.claude/plans/example-plan.md"}}]}},"uuid":"user_write_result","timestamp":"2026-04-13T10:00:08Z","toolUseResult":{{"type":"create","filePath":"/Users/example/.claude/plans/example-plan.md","content":"# Example plan"}},"cwd":"{cwd}"}}
+{{"parentUuid":"user_write_result","isSidechain":false,"type":"assistant","message":{{"role":"assistant","content":[{{"type":"tool_use","id":"tool_exit_1","name":"ExitPlanMode","input":{{"plan":"# Example plan"}}}}]}},"uuid":"assistant_exit","timestamp":"2026-04-13T10:00:10Z","cwd":"{cwd}"}}
+{{"parentUuid":"assistant_exit","isSidechain":false,"promptId":"prompt-1","type":"user","message":{{"role":"user","content":[{{"type":"tool_result","content":"The user doesn't want to proceed with this tool use. The tool use was rejected.","is_error":true,"tool_use_id":"tool_exit_1"}}]}},"uuid":"user_exit_result","timestamp":"2026-04-13T10:00:11Z","toolUseResult":"User rejected tool use","cwd":"{cwd}"}}
+{{"parentUuid":"user_exit_result","isSidechain":false,"type":"user","message":{{"role":"user","content":"[Request interrupted by user for tool use]"}},"uuid":"interrupt_notice","timestamp":"2026-04-13T10:00:12Z","cwd":"{cwd}"}}
+"##,
+        cwd = cwd.to_string_lossy()
+    );
+    fs::write(claude_dir.join("session.jsonl"), session).unwrap();
 }
 
 #[test]
@@ -334,4 +354,65 @@ fn test_peek_partner_returns_empty_when_no_session() {
     assert_eq!(resp.messages.len(), 0);
     assert!(!resp.partner_active);
     assert!(resp.session_path.is_none());
+}
+
+#[test]
+fn test_peek_partner_claude_accepts_underscore_normalized_project_dir() {
+    let tmp = TempDir::new().expect("tempdir");
+    let home = tmp.path().to_path_buf();
+    let cwd = PathBuf::from("/tmp/android_proj/vpn/ldacctor");
+
+    let encoded = cwd.to_string_lossy().replace('/', "-").replace('_', "-");
+    let claude_dir = home.join(".claude/projects").join(encoded);
+    fs::create_dir_all(&claude_dir).unwrap();
+    fs::write(
+        claude_dir.join("session.jsonl"),
+        r#"{"type":"user","message":{"role":"user","content":"Claude normalized cwd user msg"},"timestamp":"2026-04-13T10:00:00Z"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Claude normalized cwd reply"}]},"timestamp":"2026-04-13T10:00:05Z"}
+"#,
+    )
+    .unwrap();
+
+    let req = PeekRequest {
+        tool: Tool::Claude,
+        limit: 30,
+        since: None,
+        cwd,
+        caller_tool: Some(Tool::Codex),
+        home_override: Some(home),
+    };
+    let resp = peek_partner(req).expect("peek");
+
+    assert_eq!(resp.messages.len(), 2);
+    assert_eq!(resp.messages[0].text, "Claude normalized cwd user msg");
+    assert_eq!(resp.messages[1].text, "Claude normalized cwd reply");
+    let session_path = resp.session_path.expect("session path");
+    assert!(
+        session_path.contains("android-proj"),
+        "expected normalized project dir, got {session_path}"
+    );
+}
+
+#[test]
+fn test_peek_partner_claude_returns_narrow_plan_summary() {
+    let cwd = PathBuf::from("/tmp/fake-project-plan");
+    let (_tmp, home) = build_fake_home(&cwd);
+    overwrite_claude_session_with_plan_fixture(&home, &cwd);
+
+    let req = PeekRequest {
+        tool: Tool::Claude,
+        limit: 30,
+        since: None,
+        cwd,
+        caller_tool: Some(Tool::Codex),
+        home_override: Some(home),
+    };
+    let resp = peek_partner(req).expect("peek");
+    let plan = resp.plan.expect("plan summary");
+
+    assert_eq!(resp.messages.len(), 2);
+    assert_eq!(plan.path, "/Users/example/.claude/plans/example-plan.md");
+    assert_eq!(plan.write_status, PeekPlanWriteStatus::Succeeded);
+    assert_eq!(plan.finalize_status, PeekPlanFinalizeStatus::Rejected);
+    assert!(plan.interrupted_after_write);
 }

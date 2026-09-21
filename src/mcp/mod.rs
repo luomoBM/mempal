@@ -1,1 +1,6 @@
-pub use mempal_mcp_server::MempalMcpServer;
+#![warn(clippy::all)]
+
+mod server;
+mod tools;
+
+pub use server::MempalMcpServer;

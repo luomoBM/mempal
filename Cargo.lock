@@ -223,16 +223,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bstr"
-version = "1.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cee35f73844aa3014bb606320a6c1f010249dbdf43342fe54b5a4f6a8ed4b79"
-dependencies = [
- "memchr",
- "serde_core",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -895,19 +885,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "globset"
-version = "0.4.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52dfc19153a48bde0cbd630453615c8151bce3a5adfac7a0aebfbf0a1e1f57e3"
-dependencies = [
- "aho-corasick",
- "bstr",
- "log",
- "regex-automata",
- "regex-syntax",
-]
-
-[[package]]
 name = "half"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1224,22 +1201,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ignore"
-version = "0.4.27"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe112b004901c62c2faa11f4f75e9864e0cc5af8da71c9115d184a3aa888749f"
-dependencies = [
- "crossbeam-deque",
- "globset",
- "log",
- "memchr",
- "regex-automata",
- "same-file",
- "walkdir",
- "winapi-util",
-]
-
-[[package]]
 name = "include-flate"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1527,22 +1488,16 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "mempal"
-version = "0.9.1"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "axum",
  "bimap",
  "clap",
- "ignore",
  "jieba-rs",
- "mempal-agent-memory",
- "mempal-embed",
- "mempal-mcp-protocol",
- "mempal-mcp-server",
- "mempal-runtime",
- "mempal-search-core",
- "mempal-store-sqlite",
+ "model2vec-rs",
+ "ort",
  "reqwest",
  "rmcp",
  "rusqlite",
@@ -1552,98 +1507,11 @@ dependencies = [
  "sqlite-vec",
  "tempfile",
  "thiserror",
+ "tokenizers 0.22.2",
  "tokio",
  "toml",
  "tower",
  "tower-http",
-]
-
-[[package]]
-name = "mempal-agent-memory"
-version = "0.9.1"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "mempal-embed"
-version = "0.9.1"
-dependencies = [
- "async-trait",
- "model2vec-rs",
- "ort",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror",
- "tokenizers 0.22.2",
- "tokio",
-]
-
-[[package]]
-name = "mempal-mcp-protocol"
-version = "0.9.1"
-
-[[package]]
-name = "mempal-mcp-server"
-version = "0.9.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "mempal-runtime",
- "rmcp",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "mempal-runtime"
-version = "0.9.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "bimap",
- "clap",
- "ignore",
- "jieba-rs",
- "mempal-agent-memory",
- "mempal-embed",
- "mempal-mcp-protocol",
- "mempal-search-core",
- "mempal-store-sqlite",
- "rmcp",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "tokio",
- "toml",
-]
-
-[[package]]
-name = "mempal-search-core"
-version = "0.9.1"
-
-[[package]]
-name = "mempal-store-sqlite"
-version = "0.9.1"
-dependencies = [
- "mempal-agent-memory",
- "mempal-search-core",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "sqlite-vec",
- "thiserror",
 ]
 
 [[package]]
@@ -2484,15 +2352,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "same-file"
-version = "1.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
-dependencies = [
- "winapi-util",
-]
-
-[[package]]
 name = "schannel"
 version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3248,16 +3107,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "walkdir"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
-dependencies = [
- "same-file",
- "winapi-util",
-]
-
-[[package]]
 name = "want"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3441,15 +3290,6 @@ name = "winapi-i686-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
-
-[[package]]
-name = "winapi-util"
-version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
-dependencies = [
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"

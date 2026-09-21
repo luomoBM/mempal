@@ -21,41 +21,24 @@ Before using the CLI, keep four nouns straight:
 
 ## Install
 
-Install the latest released CLI from crates.io:
+Install the CLI locally:
 
 ```bash
-cargo install mempal --version 0.9.1 --locked
+cargo install --path crates/mempal-cli --locked
 ```
 
 Install with REST support:
 
 ```bash
-cargo install mempal --version 0.9.1 --locked --features rest
+cargo install --path crates/mempal-cli --locked --features rest
 ```
 
 For development without installation:
 
 ```bash
-cargo run -- --help
-cargo run --features rest -- serve --help
+cargo run -p mempal-cli -- --help
+cargo run -p mempal-cli --features rest -- serve --help
 ```
-
-Source checkouts are Cargo workspaces. The root package is still `mempal` and
-still owns the installable CLI binary, while reusable public crates live under
-`crates/`:
-
-- `mempal-embed`: embedding traits and implementations
-- `mempal-search-core`: FTS5 query escaping and RRF rank fusion
-- `mempal-agent-memory`: memory domain types and anchor helpers
-- `mempal-mcp-protocol`: self-describing MCP protocol text
-- `mempal-store-sqlite`: SQLite schema, migrations, `Database`, FTS5, sqlite-vec, KG, tunnels, cards, and adoption tables
-- `mempal-runtime`: ingest, search orchestration, context, brief, knowledge, factcheck, projects, cowork, doctor, and AAAK workflows
-- `mempal-mcp-server`: MCP server adapter and tool wiring
-
-The split is intentionally coarse. The root `mempal` package remains the
-installable CLI/REST facade, and feature families such as knowledge, cowork,
-context, and factcheck stay grouped under `mempal-runtime` instead of becoming
-separate crates.
 
 ## Configuration
 
@@ -93,7 +76,6 @@ db_path = "~/.mempal/palace.db"
 backend = "api"
 api_endpoint = "http://localhost:11434/api/embeddings"
 api_model = "nomic-embed-text"
-dimensions = 768  # optional; defaults to 384 when omitted
 ```
 
 Notes:
@@ -110,8 +92,8 @@ Use this when you already know the concepts and just need the right command quic
 
 | Command | Purpose |
 |---------|---------|
-| `mempal init <DIR> [--dry-run] [--ignore-file PATH]` | infer a `wing` and seed initial taxonomy rooms from a project tree |
-| `mempal ingest --wing <WING> <DIR> [--dry-run] [--ignore-file PATH]` | chunk, embed, and store a project tree |
+| `mempal init <DIR> [--dry-run]` | infer a `wing` and seed initial taxonomy rooms from a project tree |
+| `mempal ingest --wing <WING> <DIR> [--dry-run]` | chunk, embed, and store a project tree |
 | `mempal search <QUERY> [--wing W] [--room R] [--json]` | hybrid search (BM25 + vector + RRF) with tunnel hints |
 | `mempal context <QUERY> [--format json] [--include-evidence] [--dao-tian-limit N]` | assemble mind-model runtime context (`dao_tian -> dao_ren -> shu -> qi`); default `dao_tian` budget is 1 |
 | `mempal field-taxonomy [--format json]` | inspect read-only recommended `field` values for typed memory |
@@ -164,17 +146,6 @@ Write those taxonomy entries:
 ```bash
 mempal init ~/code/myapp
 ```
-
-By default, `init` and directory-mode `ingest` respect the target project's
-`.gitignore`, `.git/info/exclude`, global Git excludes, and a root-level
-`.mempalignore`. Add generated files, build outputs, or caches that should stay
-out of project memory to `.mempalignore`.
-
-For one-off runs, pass `--ignore-file <PATH>` more than once to add custom ignore
-files. Use `--no-gitignore` or `--no-mempalignore` when you need to disable one
-of the default sources. Mempal still hard-skips `.git/`, `target/`, and
-`node_modules/` during project traversal. Explicit file ingest bypasses traversal
-ignore rules.
 
 ### 2. Preview ingest before writing
 
@@ -603,7 +574,7 @@ mempal serve --mcp
 
 If `mempal` was built without the `rest` feature, plain `mempal serve` behaves the same way.
 
-The MCP server exposes nineteen tools:
+The MCP server exposes eighteen tools:
 
 - `mempal_status` — state + protocol + AAAK spec
 - `mempal_search` — hybrid search (BM25 + vector + RRF) with tunnel hints and AAAK-derived structured signals (`entities` / `topics` / `flags` / `emotions` / `importance_stars`)
@@ -621,7 +592,6 @@ The MCP server exposes nineteen tools:
 - `mempal_kg` — knowledge graph: add/query/invalidate/timeline/stats
 - `mempal_tunnels` — cross-wing room discovery
 - `mempal_peek_partner` — read the partner coding agent's live session (Claude ↔ Codex); pure read, never writes to mempal
-- `mempal_session_peek` — read an explicit local Claude/Codex session by concrete `tool + cwd`; use for same-tool or cross-project session reads
 - `mempal_cowork_push` — send a short handoff message (≤ 8 KB) to the partner agent's inbox; delivered at the partner's next UserPromptSubmit via a drain hook
 - `mempal_fact_check` — offline contradiction detection against KG triples and known entities
 
@@ -682,7 +652,6 @@ Soft-delete a drawer:
 Two coding agents running on the same repo — typically Claude Code and Codex — can collaborate through two primitives:
 
 - **`mempal_peek_partner`** (P6) — read the partner's live session file without storing anything in mempal. Use for "what is partner currently doing" questions.
-- **`mempal_session_peek`** (P112) — read an explicit local session by concrete `tool + cwd`. Use for same-tool or cross-project inspection such as Codex reading another Codex project's transcript.
 - **`mempal_cowork_push`** (P8) — send a short handoff (≤ 8 KB) to the partner's inbox. The partner sees it prepended to their next user prompt via a UserPromptSubmit hook. Use for "make sure partner notices X" status updates that are too transient for an ingest drawer.
 
 ### Install hooks

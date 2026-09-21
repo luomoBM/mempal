@@ -74,12 +74,15 @@ since     : RFC3339 timestamp                可选
     {"role": "user",      "at": "2026-04-13T14:20:11Z", "text": "..."},
     {"role": "assistant", "at": "2026-04-13T14:20:45Z", "text": "..."}
   ],
+  "plan": null,
   "truncated": false
 }
 ```
 
 - `messages` 按时间升序
 - 只保留 user+assistant 文本内容，过滤掉 tool-use 内部结构
+- `plan` 默认为 `null`；仅当目标是 Claude 且 session 中出现 plan-mode 信号时，返回一个窄摘要对象：`{path, declared_at, written_at, write_status, finalize_status, interrupted_after_write}`
+- `plan` 不是通用事件流，也不携带原始 tool payload；它只是把高价值的 plan 文件状态压缩成可消费元数据
 - `partner_active = true` 表示 `session_mtime` 在最近 30 分钟内
 - `truncated = true` 表示有消息被 `limit` 截断
 
@@ -88,7 +91,8 @@ since     : RFC3339 timestamp                可选
 1. **定位 session 文件**（见下"实现细节"）
 2. **解析 JSONL**，按 `tool` 类型调对应 adapter
 3. **过滤 + 截断**：去掉 tool-use 噪音，按 `since` 过滤，取最后 `limit` 条
-4. **返回**
+4. **派生 plan 摘要**：仅对 Claude session 的 `plan_mode` / `Write` / `ExitPlanMode` 相关信号生成可选 `plan`
+5. **返回**
 
 工具**不会**把读到的内容写进 mempal。peek 是纯读操作。
 
@@ -133,7 +137,8 @@ let latest = glob(&format!("{project_dir}/*.jsonl"))
 //   {"type": "permission-mode", ...}              → skip
 //   {"parentUuid": ..., "attachment": {...}, ...} → message link
 // message 内容在 attachment.content 或 embedded stringified JSON
-// 过滤只保留 user/assistant text，丢弃 tool-use 内部结构
+// 过滤只保留 user/assistant text，丢弃通用 tool-use 内部结构
+// 唯一例外：若命中 plan_mode + Write/ExitPlanMode 链路，额外派生一个窄 plan 摘要
 ```
 
 **已通过目测验证**：

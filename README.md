@@ -1,15 +1,6 @@
 # mempal
 
-[![Crates.io](https://img.shields.io/crates/v/mempal.svg)](https://crates.io/crates/mempal)
-[![Downloads](https://img.shields.io/crates/d/mempal.svg)](https://crates.io/crates/mempal)
-[![docs.rs](https://docs.rs/mempal/badge.svg)](https://docs.rs/mempal)
-[![CI](https://github.com/ZhangHanDong/mempal/actions/workflows/ci.yml/badge.svg)](https://github.com/ZhangHanDong/mempal/actions/workflows/ci.yml)
-[![Release](https://github.com/ZhangHanDong/mempal/actions/workflows/release.yml/badge.svg)](https://github.com/ZhangHanDong/mempal/actions/workflows/release.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
 Project memory for coding agents. Single binary, `cargo install mempal`, find past decisions with citations in seconds.
-
-Latest release: **v0.9.1** (2026-08-19).
 
 ## What It Does
 
@@ -28,7 +19,7 @@ Next session (any agent) → mempal search → finds the decision with source ci
 ## Quick Start
 
 ```bash
-cargo install mempal --version 0.9.1 --locked
+cargo install --path crates/mempal-cli --locked
 
 mempal init ~/code/myapp
 mempal ingest ~/code/myapp --wing myapp
@@ -39,13 +30,7 @@ mempal wake-up
 With REST support:
 
 ```bash
-cargo install mempal --version 0.9.1 --locked --features rest
-```
-
-From a source checkout:
-
-```bash
-cargo install --path . --locked
+cargo install --path crates/mempal-cli --locked --features rest
 ```
 
 ## Configuration
@@ -72,7 +57,6 @@ backend = "onnx"
 backend = "api"
 api_endpoint = "http://localhost:11434/api/embeddings"
 api_model = "nomic-embed-text"
-dimensions = 768  # optional; defaults to 384 when omitted
 ```
 
 ## Commands
@@ -101,19 +85,6 @@ dimensions = 768  # optional; defaults to 384 when omitted
 | `mempal fact-check [PATH\|-] [--wing W] [--room R] [--now <UNIX_SECS>]` | Offline contradiction check against KG triples + known entities |
 | `mempal bench longmemeval <FILE>` | LongMemEval retrieval benchmark |
 
-### Project ignore rules
-
-`mempal init <DIR>` and directory-mode `mempal ingest <DIR>` use the target
-project's ignore rules by default. They respect `.gitignore`, `.git/info/exclude`,
-global Git excludes, and a root-level `.mempalignore`. Built artifacts that should
-never become project memory can be listed in `.mempalignore` without changing the
-project's Git behavior.
-
-Use `--ignore-file <PATH>` to add one or more extra ignore files for a run. Use
-`--no-gitignore` or `--no-mempalignore` to disable either default source. Explicit
-file ingest remains explicit: `mempal ingest path/to/file --wing <W>` still ingests
-that file even if the project ignore rules would skip it during directory traversal.
-
 ## MCP Server (10 tools)
 
 `mempal serve --mcp` exposes these tools via Model Context Protocol:
@@ -128,7 +99,6 @@ that file even if the project ignore rules would skip it during directory traver
 | `mempal_kg` | Knowledge graph: add/query/invalidate/timeline/stats |
 | `mempal_tunnels` | Cross-wing room discovery |
 | `mempal_peek_partner` | Read partner agent's live session (Claude ↔ Codex), pure read, never writes |
-| `mempal_session_peek` | Read an explicit Claude/Codex local session by concrete tool + cwd, including same-tool cross-project reads |
 | `mempal_cowork_push` | Send a short handoff message to partner agent's inbox (at-next-submit delivery) |
 | `mempal_fact_check` | Offline contradiction detection vs KG triples + known entities (similar-name, relation mismatch, stale facts) |
 
@@ -146,14 +116,14 @@ mempal teaches agents these rules through self-description:
 4. **SAVE AFTER DECISIONS** — persist rationale, not just outcomes
 5. **CITE EVERYTHING** — reference drawer_id and source_file
 5a. **KEEP A DIARY** — record behavioral observations in wing="agent-diary"
-8. **PARTNER AWARENESS** — use `mempal_peek_partner` for live partner-agent session, `mempal_session_peek` for explicit same-tool/cross-project local sessions, and mempal search only for crystallized drawers
+8. **PARTNER AWARENESS** — use `mempal_peek_partner` for live partner-agent session, not crystallized drawers
 9. **DECISION CAPTURE** — `mempal_ingest` is for firm decisions only; include partner input when peek informed the call
 10. **COWORK PUSH** — use `mempal_cowork_push` as the SEND primitive in the SEND/READ/PERSIST triad; at-next-submit delivery, not real-time
 11. **VERIFY BEFORE INGEST** — call `mempal_fact_check` before persisting a decision that asserts entity relationships; it catches similar-name typos, relation mismatches against the KG, and stale facts with expired `valid_to`
 
 ## Agent Cowork (P6 peek + P8 push)
 
-Two coding agents (Claude Code and Codex) can collaborate on the same repo through a per-project inbox + hook-driven injection channel, on top of `mempal_peek_partner` (read live partner session), `mempal_session_peek` (read an explicit local session by concrete tool + cwd), and `mempal_cowork_push` (send ephemeral handoff).
+Two coding agents (Claude Code and Codex) can collaborate on the same repo through a per-project inbox + hook-driven injection channel, on top of `mempal_peek_partner` (read live partner session) and `mempal_cowork_push` (send ephemeral handoff).
 
 Install hooks once per repo (run at the repo root):
 
@@ -267,14 +237,14 @@ Chinese text uses jieba-rs POS tagging for proper word segmentation.
 
 | Crate | Responsibility |
 |-------|---------------|
-| `mempal` | Installable CLI package, REST entrypoint, and legacy facade paths |
-| `mempal-embed` | Public `Embedder` / `EmbedderFactory` traits, API embedder, model2vec and ONNX implementations |
-| `mempal-search-core` | Public FTS5 query escaping and RRF rank-fusion primitives |
-| `mempal-agent-memory` | Public agent-memory domain types and anchor helpers |
-| `mempal-mcp-protocol` | Public self-describing `MEMORY_PROTOCOL` text |
-| `mempal-store-sqlite` | Public SQLite storage layer: schema, migrations, `Database`, FTS5, sqlite-vec, KG, tunnels, cards, adoption tables |
-| `mempal-runtime` | Public runtime workflows: ingest, search orchestration, context, brief, knowledge, factcheck, projects, cowork, doctor, AAAK |
-| `mempal-mcp-server` | Public MCP server adapter and tool wiring for the runtime |
+| `mempal-core` | Types, SQLite schema v4, taxonomy, triples |
+| `mempal-embed` | Embedder trait (model2vec default, ort optional) |
+| `mempal-ingest` | Format detection, normalization, chunking (5 formats) |
+| `mempal-search` | Hybrid search (BM25 + vector + RRF), routing, tunnels |
+| `mempal-aaak` | AAAK encode/decode with BNF grammar + roundtrip tests |
+| `mempal-mcp` | MCP server (9 tools) |
+| `mempal-api` | Feature-gated REST API |
+| `mempal-cli` | CLI entrypoint |
 
 Key design choices:
 - **model2vec-rs** default embedder — zero native deps, multilingual (BGE-M3 distilled)
@@ -283,11 +253,6 @@ Key design choices:
 - **Soft-delete** with audit trail — `mempal delete` + `mempal purge`
 - **Importance ranking** — drawers have 0-5 importance, wake-up sorts by importance
 - **Semantic dedup** — ingest warns (doesn't block) when similar content exists
-- **Public workspace crates** — reusable libraries are maintained in this repo and
-  published as versioned crates while `cargo install mempal` remains the CLI path.
-  P114 keeps the split coarse: storage, runtime, and MCP server are separate
-  crates, but feature families such as knowledge, cowork, and context remain in
-  `mempal-runtime`.
 
 ## Development
 
@@ -298,7 +263,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all --check
 ```
 
-After changing the embedding model or dimensions, re-embed existing drawers:
+After changing the embedding model, re-embed existing drawers:
 
 ```bash
 mempal reindex

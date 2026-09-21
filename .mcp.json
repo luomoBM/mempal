@@ -1,8 +1,13 @@
 {
   "mcpServers": {
     "mempal": {
+      "type": "stdio",
       "command": "mempal",
-      "args": ["serve", "--mcp"]
+      "args": [
+        "serve",
+        "--mcp"
+      ],
+      "env": {}
     }
   }
 }

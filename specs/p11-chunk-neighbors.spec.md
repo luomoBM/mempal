@@ -22,12 +22,12 @@ mempalace 的方案：`search` 返回 top chunk 时同时带上**同一 source_f
 - **`SearchResult` 追加可选字段**：
   ```rust
   pub neighbors: Option<ChunkNeighbors>,
-  
+
   pub struct ChunkNeighbors {
       pub prev: Option<NeighborChunk>,
       pub next: Option<NeighborChunk>,
   }
-  
+
   pub struct NeighborChunk {
       pub drawer_id: String,
       pub content: String,

@@ -22,7 +22,7 @@
 
 set -euo pipefail
 
-cat <<'EOF'
+cat >&2 <<'EOF'
 Context compression is imminent. Before the window slides, save ALL important
 facts from this session to mempal:
 
@@ -37,5 +37,5 @@ Prioritize decisions over narrative. Cite file paths where possible.
 After saving, respond "saved N drawers" so the user can see what was persisted.
 EOF
 
-# Exit 2 = block reason follows on stdout (Claude Code convention)
+# Exit 2 = block reason follows on stderr (Claude Code convention)
 exit 2

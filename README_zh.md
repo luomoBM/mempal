@@ -1,15 +1,6 @@
 # mempal
 
-[![Crates.io](https://img.shields.io/crates/v/mempal.svg)](https://crates.io/crates/mempal)
-[![下载量](https://img.shields.io/crates/d/mempal.svg)](https://crates.io/crates/mempal)
-[![docs.rs](https://docs.rs/mempal/badge.svg)](https://docs.rs/mempal)
-[![CI](https://github.com/ZhangHanDong/mempal/actions/workflows/ci.yml/badge.svg)](https://github.com/ZhangHanDong/mempal/actions/workflows/ci.yml)
-[![Release](https://github.com/ZhangHanDong/mempal/actions/workflows/release.yml/badge.svg)](https://github.com/ZhangHanDong/mempal/actions/workflows/release.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
 Coding agent 的项目记忆工具。单二进制，`cargo install mempal`，10 秒内带出处找回历史决策。
-
-最新版本：**v0.9.1**（2026-08-19）。
 
 ## 做什么
 
@@ -28,7 +19,7 @@ Agent 写代码 → 提交 → mempal 保存决策上下文
 ## 快速开始
 
 ```bash
-cargo install mempal --version 0.9.1 --locked
+cargo install --path crates/mempal-cli --locked
 
 mempal init ~/code/myapp
 mempal ingest ~/code/myapp --wing myapp
@@ -39,13 +30,7 @@ mempal wake-up
 启用 REST 支持：
 
 ```bash
-cargo install mempal --version 0.9.1 --locked --features rest
-```
-
-从源码 checkout 安装：
-
-```bash
-cargo install --path . --locked
+cargo install --path crates/mempal-cli --locked --features rest
 ```
 
 ## 配置
@@ -72,7 +57,6 @@ backend = "onnx"
 backend = "api"
 api_endpoint = "http://localhost:11434/api/embeddings"
 api_model = "nomic-embed-text"
-dimensions = 768  # 可选；省略时默认 384
 ```
 
 ## 命令一览
@@ -101,18 +85,6 @@ dimensions = 768  # 可选；省略时默认 384
 | `mempal fact-check [PATH\|-] [--wing W] [--room R] [--now <UNIX_SECS>]` | 离线矛盾检查（对照 KG 三元组 + 已知 entity） |
 | `mempal bench longmemeval <FILE>` | LongMemEval 检索 benchmark |
 
-### 项目 ignore 规则
-
-`mempal init <DIR>` 和目录模式的 `mempal ingest <DIR>` 默认复用目标项目自己的
-ignore 规则。它们会尊重 `.gitignore`、`.git/info/exclude`、全局 Git exclude，
-以及项目根目录的 `.mempalignore`。只想从项目记忆中排除的编译产物、缓存目录或
-生成文件，可以写进 `.mempalignore`，不需要改变项目本身的 Git 行为。
-
-单次运行可以用 `--ignore-file <PATH>` 追加一个或多个 ignore 文件。需要关闭默认
-来源时，用 `--no-gitignore` 或 `--no-mempalignore`。显式文件导入保持显式：
-`mempal ingest path/to/file --wing <W>` 即使在目录遍历时会被 ignore 规则跳过，
-仍然会导入这个文件。
-
 ## MCP 服务器（10 个工具）
 
 `mempal serve --mcp` 通过 Model Context Protocol 暴露：
@@ -127,7 +99,6 @@ ignore 规则。它们会尊重 `.gitignore`、`.git/info/exclude`、全局 Git 
 | `mempal_kg` | 知识图谱：add/query/invalidate/timeline/stats |
 | `mempal_tunnels` | 跨 Wing room 发现 |
 | `mempal_peek_partner` | 读 partner agent 当前 session（Claude ↔ Codex），纯只读 |
-| `mempal_session_peek` | 按明确 `tool + cwd` 读取本地 Claude/Codex session，支持同工具跨项目读取 |
 | `mempal_cowork_push` | 向 partner agent inbox 投递短消息（at-next-submit 交付） |
 | `mempal_fact_check` | 离线矛盾检测（相似名 / 关系对立 / 时态失效，纯本地无 LLM） |
 
@@ -145,7 +116,7 @@ mempal 通过自描述教 agent 这些规则：
 4. **决策后保存** — 保存理由，不仅是结果
 5. **引用一切** — 引用 drawer_id 和 source_file
 5a. **记日记** — session 结束时在 `wing="agent-diary"` 下记行为观察
-8. **Partner 感知** — 问 partner 当前状态用 `mempal_peek_partner`（live session），明确同工具/跨项目本地 session 用 `mempal_session_peek`，问已沉淀决策才用 `mempal_search`
+8. **Partner 感知** — 问 partner 当前状态用 `mempal_peek_partner`（live session），问已沉淀决策才用 `mempal_search`
 9. **决策沉淀** — `mempal_ingest` 只存已达成的硬决策；partner 参与时要把 partner 的关键贡献带进 drawer 正文
 10. **COWORK PUSH** — `mempal_cowork_push` 是 SEND 原语，at-next-submit 交付、非实时；别用它做该 ingest 的事
 11. **入库前校验** — 在 ingest 含 entity 关系断言的决策前调 `mempal_fact_check`，它抓相似名拼错、KG 关系矛盾、以及 `valid_to` 已过期的 stale fact
@@ -231,14 +202,14 @@ mempal compress "Kai recommended Clerk over Auth0 based on pricing and DX"
 
 | Crate | 职责 |
 |-------|------|
-| `mempal` | 可安装 CLI package、REST 入口、legacy facade paths |
-| `mempal-embed` | 公共 `Embedder` / `EmbedderFactory` trait、API embedder、model2vec 与 ONNX 实现 |
-| `mempal-search-core` | 公共 FTS5 query escaping 与 RRF rank-fusion 基础能力 |
-| `mempal-agent-memory` | 公共 agent-memory 领域类型与 anchor helper |
-| `mempal-mcp-protocol` | 公共自描述 `MEMORY_PROTOCOL` 文本 |
-| `mempal-store-sqlite` | 公共 SQLite 存储层：schema、migration、`Database`、FTS5、sqlite-vec、KG、tunnels、cards、adoption tables |
-| `mempal-runtime` | 公共 runtime workflows：ingest、search orchestration、context、brief、knowledge、factcheck、projects、cowork、doctor、AAAK |
-| `mempal-mcp-server` | 公共 MCP server adapter 与工具 wiring |
+| `mempal-core` | 类型、SQLite schema v4、taxonomy、triples |
+| `mempal-embed` | Embedder trait（model2vec 默认，ort 可选） |
+| `mempal-ingest` | 格式检测、归一化、分块（5 种格式） |
+| `mempal-search` | 混合检索（BM25 + 向量 + RRF）、路由、tunnel |
+| `mempal-aaak` | AAAK 编解码（BNF 语法 + 往返验证） |
+| `mempal-mcp` | MCP 服务器（7 工具） |
+| `mempal-api` | REST API（feature-gated） |
+| `mempal-cli` | CLI 入口 |
 
 关键设计：
 - **model2vec-rs** 默认嵌入——零原生依赖，多语言（BGE-M3 蒸馏）
@@ -247,10 +218,6 @@ mempal compress "Kai recommended Clerk over Auth0 based on pricing and DX"
 - **软删除** + 审计日志——`mempal delete` + `mempal purge`
 - **重要性排序**——drawer 有 0-5 重要性评分，wake-up 按重要性排序
 - **语义去重**——ingest 时检测相似内容，warning 但不阻塞
-- **公共 workspace crates**——可复用库在同一 repo/workspace 内维护并以 versioned crates 发布，
-  `cargo install mempal` 继续作为 CLI 安装路径。P114 保持粗粒度拆分：storage、
-  runtime、MCP server 独立成 crate，但 knowledge、cowork、context 等功能族仍留在
-  `mempal-runtime`，不继续碎拆。
 
 ## 开发
 

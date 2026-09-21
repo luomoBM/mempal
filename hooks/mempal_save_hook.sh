@@ -40,8 +40,8 @@ if (( count % INTERVAL != 0 )); then
   exit 0
 fi
 
-# Block AI with save instruction (Claude Code reads stdout as the block reason)
-cat <<'EOF'
+# Block AI with save instruction (Claude Code reads stderr as the block reason)
+cat >&2 <<'EOF'
 Before stopping, save the key decisions from this conversation to mempal.
 
 For each decision:
@@ -54,5 +54,5 @@ For each decision:
 If no new decisions were reached this round, respond "nothing to save" and stop.
 EOF
 
-# Exit 2 = block reason follows on stdout (Claude Code convention)
+# Exit 2 = block reason follows on stderr (Claude Code convention)
 exit 2

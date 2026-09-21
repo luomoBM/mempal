@@ -16,11 +16,11 @@ Rule 9 DECISION CAPTURE）。设计文档见 `docs/specs/2026-04-13-cowork-peek-
 ## Decisions
 
 - 新增 MCP 工具 `mempal_peek_partner`，参数 `tool: "claude" | "codex" | "auto"`、`limit?: usize` 默认 30、`since?: RFC3339 String`
-- 工具返回 JSON：`partner_tool`、`session_path`、`session_mtime` (RFC3339)、`partner_active: bool`、`messages: [{role, at, text}]` 升序、`truncated: bool`
+- 工具返回 JSON：`partner_tool`、`session_path`、`session_mtime` (RFC3339)、`partner_active: bool`、`messages: [{role, at, text}]` 升序、`plan?: {path, declared_at, written_at, write_status, finalize_status, interrupted_after_write}`、`truncated: bool`
 - `partner_active = true` 当且仅当 `session_mtime` 在调用时刻 30 分钟以内
 - 项目隔离由调用方 cwd（`std::env::current_dir`）决定，不暴露独立的 project 参数；每次调用都以当前 cwd 为准
 - Claude session adapter 路径：`~/.claude/projects/<encoded_cwd>/*.jsonl`，`encoded_cwd = cwd.replace('/', "-")`；选 mtime 最新的 `.jsonl`
-- Claude jsonl 真实 schema：每行是 `{"type":"user"|"assistant","message":{"role":...,"content": string | [{type:text|tool_use|tool_result,...}]}, "isMeta":bool, "timestamp":..., "cwd":...}`；adapter 跳过 `isMeta:true`，从 `message.content` 提取 text 块（拼接），忽略 tool_use / tool_result 块
+- Claude jsonl 真实 schema：每行是 `{"type":"user"|"assistant","message":{"role":...,"content": string | [{type:text|tool_use|tool_result,...}]}, "isMeta":bool, "timestamp":..., "cwd":...}`；adapter 跳过 `isMeta:true`，从 `message.content` 提取 text 块（拼接），忽略通用 tool_use / tool_result 块；仅对 plan-mode 的 `attachment.planFilePath`、`Write`、`ExitPlanMode` 和对应 `tool_result` 提取一个**派生** `plan` 摘要
 - Codex session adapter 路径：`~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl`；Codex 用 LOCAL 日期命名目录，所以 adapter 扫 `[UTC_today - 7, UTC_today + 1]` 共 9 个 date 目录以覆盖"最近 7 local 天"在任意时区偏移下的情况（正偏移如 +08 的早晨，live session 在 `UTC_today + 1`；负偏移如 -08 的晚间，7 local 天前是 `UTC_today - 7`）。按 mtime 倒排，读每个文件首行 `session_meta.payload.cwd` 过滤出当前项目，取第一个命中
 - Codex jsonl 真实 schema：只处理 `type:"response_item"` 且 `payload.type:"message"` 的条目；`payload.role` 为 user/assistant；text 来自 `payload.content[].text`（其中 `type:"input_text"` 或 `"output_text"`）；跳过 `reasoning` payload 和 `event_msg` 条目
 - adapter 单次扫描返回 `(messages, truncated)`；`truncated=true` 当消息总数大于 `limit`；成功提取的 user/assistant 消息按升序返回，超出 `limit` 时取尾部
@@ -60,7 +60,7 @@ Rule 9 DECISION CAPTURE）。设计文档见 `docs/specs/2026-04-13-cowork-peek-
 - 访问控制 / 多租户 / 权限校验
 - 流式增量 peek（长轮询、订阅）
 - 对 session 消息做语义过滤或摘要（agent 自己基于返回的原文处理）
-- `mempal_peek_partner` 返回值中的 tool-use 元数据（仅 user/assistant 文本）
+- `mempal_peek_partner` 返回值中的通用 tool-use 元数据 / 事件流（仍只返回 user/assistant 文本；唯一例外是 Claude plan-mode 的派生 `plan` 摘要对象）
 - 任务 slug、task lifecycle、inbox/claim/dispatch 任何结构
 - 跨 agent 的 write-to-inbox 通讯（只做 read-through peek）
 
@@ -172,3 +172,17 @@ Scenario: tool-use 内部结构被 adapter 过滤，只返回 user/assistant 文
   Then 返回的 `messages` 长度为 6
   And 每条 `messages[i].role` 为 "user" 或 "assistant"
   And 返回的 `messages` 不包含任何 tool_use id 或 tool_result 的序列化结构
+
+Scenario: Claude plan-mode 会返回窄 `plan` 摘要而不污染 messages
+  Test:
+    Filter: test_peek_partner_claude_returns_narrow_plan_summary
+    Level: integration
+    Test Double: fixture_jsonl
+    Targets: src/cowork/claude.rs, src/cowork/peek.rs, src/mcp/tools.rs
+  Given Claude fixture jsonl 包含 `attachment.type = "plan_mode"`、一个写入 `~/.claude/plans/*.md` 的 `Write`、以及一个被用户拒绝的 `ExitPlanMode`
+  When 以 `tool="claude"` 调用 `mempal_peek_partner`
+  Then 返回的 `plan.path` 指向该 plan 文件
+  And `plan.write_status` 为 "succeeded"
+  And `plan.finalize_status` 为 "rejected"
+  And `plan.interrupted_after_write` 为 true
+  And `messages` 仍然只包含 user/assistant 文本，不包含任何 tool_use id、tool_result payload 或 plan 文件内容

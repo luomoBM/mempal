@@ -164,14 +164,6 @@ mempal 借鉴 MemPalace 的设计理念（verbatim 存储、Wing/Room 结构、A
 | `specs/p107-ingest-entrypoint-discoverability.spec.md` | 完成 | P107 ingest entrypoint discoverability：把 evidence-vs-knowledge ingest 边界做成 first-time agent 下手前可见的 push-型契约——`mempal_ingest` 工具描述 + `IngestRequest` knowledge-only 字段 schema doc + 错误文案补救 + MEMORY_PROTOCOL Rule 4；纯文档/可发现性，零 schema/行为/校验变更 |
 | `specs/p108-peek-cwd-cross-project.spec.md` | 完成 | P108 peek cwd cross-project：`mempal_peek_partner` 加可选 `cwd` + 新 CLI `mempal cowork-peek --tool --cwd`，支持无 tmux 跨项目读 partner live session；省略 `cwd` 保持原 `current_dir` 行为，零 peek_partner/存储变更 |
 | `specs/p109-cross-project-resume.spec.md` | 完成 | P109 cross-project resume：`mempal projects` / `mempal_projects` 列出所有项目（wing + worktree 路径 + 计数 + 最近活动），`mempal resume <fuzzy>` / `mempal_resume` 模糊解析到 wing/路径并返回项目路径 + 最近决策 + in-flight candidate + 下一步；只读、无 embedder、不写库、不改 context；从任意目录"继续 xxx 项目" |
-| `specs/p110-public-issue-compatibility.spec.md` | 完成 | P110 public issue compatibility fixes：修复 GitHub #1-#4（drawer identity source-aware + 12 hex、同批去重/insert bool、Windows `~/` expansion、MCP signed-compatible schema、`tunnel_hints` always on-wire） |
-| `specs/p111-project-ignore-rules.spec.md` | 完成 | P111 project ignore rules：`init` / directory `ingest` 共享 project path-filter，默认尊重 `.gitignore` + `.mempalignore`，支持 `--ignore-file` / `--no-gitignore` / `--no-mempalignore` |
-| `specs/p112-session-peek.spec.md` | 完成 | P112 explicit MCP session peek：新增 `mempal_session_peek` 显式按 `tool + cwd` 只读读取本地 Claude/Codex session，支持同工具/跨项目场景，同时保持 `mempal_peek_partner` self-peek 保护不变 |
-| `specs/p113-public-workspace-crates.spec.md` | 完成 | P113 public multi-crate workspace split：保留 root `mempal` CLI 包，同时新增公开可发布的 `mempal-embed` / `mempal-search-core` / `mempal-agent-memory` / `mempal-mcp-protocol` workspace crates，并通过 legacy facade path 兼容现有 API |
-| `specs/p114-coarse-workspace-split.spec.md` | 完成 | P114 coarse workspace split：新增公开可发布的 `mempal-store-sqlite` / `mempal-runtime` / `mempal-mcp-server` 三个粗粒度 crate，把 SQLite storage、runtime workflows、MCP server wiring 从 root 拆出，同时保留 root CLI 和 legacy facade paths |
-| `specs/p115-codex-preamble-noise-strip.spec.md` | 完成 | P115 Codex runtime preamble strip：`strip_codex_rollout_noise` 剥离 `<INSTRUCTIONS>` / `<user_instructions>` / `<environment_context>` / `<recommended_plugins>` / `<turn_aborted>` wrapper 块（GitHub #10）；`CURRENT_NORMALIZE_VERSION` 2→3 让 `reindex --stale` 重拾 PR #7 前的旧 source；`is_codex_jsonl` 要求至少一条 `event_msg`/`response_item` |
-| `specs/p116-cowork-pair-delivery-receipts.spec.md` | 完成 | P116 cowork pair-push delivery receipts：pair 通道每条 push 基于确定性 base 生成唯一 `message_id`（`CoworkPushResponse` 返回），push/drain 写有界 receipts event log，`mempal cowork-receipts` / `cowork-status` 汇总 pending/drained/lost，`cowork-drain --hook-runtime` 记录注入 runtime（GitHub #81） |
-| `specs/p117-reindex-atomic-replace.spec.md` | 完成 | P117 atomic reindex replace：embed 先行并验证向量基数，delete/insert 单事务且 closure/COMMIT/ID 冲突失败均回滚；dry-run/real-run 报告并跳过 missing-source 与 Stage-1/Phase-2 knowledge 引用保护的 source，避免 evidence refs 悬空；file-less source 保持不可重归一化 |
 
 ### 当前 Spec（草稿，未实现）
 
@@ -286,14 +278,6 @@ mempal 借鉴 MemPalace 的设计理念（verbatim 存储、Wing/Room 结构、A
 - `docs/plans/2026-06-09-p107-ingest-entrypoint-discoverability.md` — P107 ingest entrypoint discoverability（已完成）
 - `docs/plans/2026-06-17-p108-peek-cwd-cross-project.md` — P108 peek cwd cross-project（已完成）
 - `docs/plans/2026-06-22-p109-cross-project-resume.md` — P109 cross-project resume（已完成）
-- `docs/plans/2026-07-02-p110-public-issue-compatibility.md` — P110 public issue compatibility fixes（已完成）
-- `docs/plans/2026-07-06-p111-project-ignore-rules.md` — P111 project ignore rules（已完成）
-- `docs/plans/2026-07-07-p112-session-peek.md` — P112 explicit MCP session peek（已完成）
-- `docs/plans/2026-07-08-p113-public-workspace-crates.md` — P113 public multi-crate workspace split（已完成）
-- `docs/plans/2026-07-09-p114-coarse-workspace-split.md` — P114 coarse workspace split（已完成）
-- `docs/plans/2026-07-26-p115-codex-preamble-noise-strip.md` — P115 Codex runtime preamble strip + normalize version bump（已完成）
-- `docs/plans/2026-07-26-p116-cowork-pair-delivery-receipts.md` — P116 cowork pair-push delivery receipts（已完成）
-- `docs/plans/2026-08-18-p117-reindex-atomic-replace.md` — P117 atomic reindex replace + dry-run feasibility report（已完成）
 
 ### Spec 使用方式
 
@@ -364,35 +348,37 @@ agent-spec lint specs/p6-cowork-peek-and-decide.spec.md --min-score 0.7
 
 ## 代码结构
 
-Cargo workspace，root package 仍是 `mempal`，并继续提供 `cargo install mempal`
-的 CLI binary。P113/P114 已把可复用边界拆成公开 workspace crates；root crate
-现在主要负责 CLI、REST entrypoint、package metadata 和 legacy facade paths。
+单 crate（`mempal`），无 cargo workspace。模块全部在 `src/` 下：
 
 ```
-Cargo.toml                         # package + workspace root；root package name 仍为 mempal
 src/
-├── main.rs                        # CLI 入口（search/context/brief/knowledge/phase3/cowork 等）
-├── lib.rs                         # root facade；保留 mempal::* legacy paths
-├── api/                           # REST API（feature-gated `rest`），调用 root facade/runtime
-├── core/                          # facade：db/config/phase3/utils/protocol/types/anchor
-├── embed/                         # facade：mempal_runtime::embed
-├── mcp/                           # facade：mempal_mcp_server::MempalMcpServer
-└── *.rs / */mod.rs                # facade：re-export mempal-runtime modules
-crates/
-├── mempal-embed/                  # public Embedder / EmbedderFactory + API/model2vec/ONNX implementations
-├── mempal-search-core/            # public FTS5 escaping + RRF rank fusion primitives
-├── mempal-agent-memory/           # public memory domain types + anchor helpers
-├── mempal-mcp-protocol/           # public MEMORY_PROTOCOL text
-├── mempal-store-sqlite/           # public SQLite schema v9 + Database + migrations + FTS/sqlite-vec/KG/tunnels/cards/adoption tables
-├── mempal-runtime/                # public ingest/search/context/brief/knowledge/factcheck/projects/cowork/doctor/AAAK workflows
-└── mempal-mcp-server/             # public rmcp server + tool request/response wiring
+├── main.rs                    # CLI 入口（clap 命令树：search/context/brief/knowledge/
+│                              #   knowledge-card/phase3/cowork-*/kg/tunnels/reindex/doctor 等）
+├── lib.rs                     # 库导出
+├── core/                      # 数据模型 + SQLite schema v9 + taxonomy + triples（db.rs / types.rs）
+├── ingest/                    # 导入管道（格式检测/归一化/分块/存储 + per-source lock）
+├── search/                    # 混合搜索（BM25 + 向量 + RRF，mod.rs）+ 路由 + tunnel hints + rerank
+├── embed/                     # 嵌入层（model2vec 默认, ort 可选）
+├── aaak/                      # AAAK 编解码（输出侧）
+├── mcp/                       # MCP 服务器（server.rs，23 工具）
+├── api/                       # REST API（feature-gated `rest`）
+├── cowork/                    # 多 agent cowork bus / peek / push
+├── factcheck/                 # 离线矛盾检测（relations / contradictions）
+├── context.rs                 # mind-model runtime context assembler
+├── projects.rs                # P109 跨项目 list + fuzzy resume（只读）
+├── brief.rs                   # deterministic cognitive brief
+├── doctor.rs                  # install/runtime 诊断
+├── field_taxonomy.rs          # field taxonomy guidance
+├── knowledge_gate.rs          # 确定性 promotion gate + policy 表
+├── knowledge_distill.rs       # evidence -> candidate distill
+├── knowledge_lifecycle.rs     # Stage-1 typed-drawer promote/demote
+├── knowledge_anchor.rs        # outward anchor publication
+├── knowledge_card_*.rs        # Phase-2 card lifecycle / retrieval / backfill
+└── adoption_analytics.rs      # Phase-3 runtime adoption analytics
 ```
 
-`mempal::core::db`、`mempal::core::types`、`mempal::core::anchor`、
-`mempal::core::protocol`、`mempal::embed`、`mempal::search`、`mempal::ingest`、
-`mempal::context`、`mempal::mcp::MempalMcpServer` 等都是兼容 facade，
-re-export 对应 workspace crates。新增子 crate 都是公开可发布 package；root
-`mempal` 用 `path + version` dependency 连接。
+> 注意：早期文档曾把 mempal 描述成 8-crate workspace（`crates/mempal-core` 等），
+> 那只是早期设想，实际实现是单 crate。`cargo install mempal` 装的是这一个 crate。
 
 ## 代码规范
 
