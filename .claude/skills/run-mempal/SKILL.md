@@ -53,6 +53,29 @@ Same binary interactively; `./target/debug/mempal --help` lists the full
 command tree (search/context/brief/phase3/cowork-*/kg/tunnels/...).
 `mempal serve --mcp` speaks MCP over stdio for client integration.
 
+## Deploy (local install to ~/.cargo/bin)
+
+Build/run/smoke never touch the installed binary. To deploy the current
+checkout as the machine's `mempal` — the one MCP clients spawn:
+
+```bash
+cargo install --path . --locked --force
+mempal doctor    # expect current_version=0.9.1 and no PATH warning
+```
+
+Then restart the MCP client (see Gotchas: long-lived clients keep the old
+process). Deploying overwrites whatever binary is installed — if the current
+install was built from a different branch with extra features, those are gone
+until that branch is rebuilt and reinstalled.
+
+To rehearse the install without touching `~/.cargo/bin`, point `--root` at a
+throwaway prefix:
+
+```bash
+cargo install --path . --locked --force --root /tmp/verify-install
+/tmp/verify-install/bin/mempal doctor
+```
+
 ## The live-DB rule (read this before any write command)
 
 There is **no `--db` flag and no `MEMPAL_DB` env var** — the DB path is always
