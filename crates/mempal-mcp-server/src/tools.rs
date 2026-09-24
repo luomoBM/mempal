@@ -1802,10 +1802,14 @@ pub struct ResumeResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pack: Option<crate::projects::ResumePack>,
     /// Candidate projects when `resolution == "ambiguous"`.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    // `default` keeps schemars from marking these required, so the
+    // skip-when-empty serialization never violates the outputSchema
+    // (strict MCP clients reject with -32602 — same class as the
+    // tunnel_hints contract fixed in #85).
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub candidates: Vec<crate::projects::ProjectSummary>,
     /// Available wings when `resolution == "not_found"`.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub available: Vec<String>,
 }
 
@@ -2716,7 +2720,7 @@ mod tests {
         SearchResult,
     };
 
-    use super::{RouteDecisionDto, SearchResponse, SearchResultDto, StatusResponse};
+    use super::{ResumeResponse, RouteDecisionDto, SearchResponse, SearchResultDto, StatusResponse};
 
     fn sample_result(content: &str) -> SearchResult {
         SearchResult {
@@ -2867,6 +2871,53 @@ mod tests {
             assert!(
                 object.contains_key(property_name),
                 "required property `{property_name}` missing from serialized search result: {json}"
+            );
+        }
+    }
+
+    /// 固化 mempal_resume 契约：skip-when-empty 字段不得进入 required。
+    #[test]
+    fn test_resume_response_skip_fields_not_required() {
+        let schema = serde_json::to_value(rmcp::schemars::schema_for!(ResumeResponse))
+            .expect("serialize resume response schema");
+        let required = schema["required"]
+            .as_array()
+            .expect("resume response required properties");
+
+        assert!(
+            !required
+                .iter()
+                .any(|property| property.as_str() == Some("candidates")
+                    || property.as_str() == Some("available")),
+            "resume schema must not require skip-when-empty fields: {schema}"
+        );
+    }
+
+    /// 模拟 Ajv 校验，确保 resolution 各分支的序列化输出不违反 schema。
+    #[test]
+    fn test_resume_response_required_props_always_serialized() {
+        // resolved 分支：candidates / available 都为空并被省略。
+        let response = ResumeResponse {
+            resolution: "resolved".to_string(),
+            query: "mempal".to_string(),
+            pack: None,
+            candidates: Vec::new(),
+            available: Vec::new(),
+        };
+        let schema = serde_json::to_value(rmcp::schemars::schema_for!(ResumeResponse))
+            .expect("serialize resume response schema");
+        let required = schema["required"]
+            .as_array()
+            .expect("resume response required properties");
+        let json = serde_json::to_value(&response).expect("serialize resume response");
+        let object = json.as_object().expect("resume response object");
+
+        for property in required {
+            // 每个 required 属性都必须出现在实际 JSON 对象中，即使值为空。
+            let property_name = property.as_str().expect("required property name");
+            assert!(
+                object.contains_key(property_name),
+                "required property `{property_name}` missing from serialized resume response: {json}"
             );
         }
     }
