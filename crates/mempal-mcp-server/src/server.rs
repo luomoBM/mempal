@@ -92,6 +92,73 @@ use super::tools::{
     TunnelsRequest, TunnelsResponse,
 };
 
+struct PreInitTolerantTransport<T> {
+    inner: T,
+    initialized: bool,
+}
+
+impl<T> PreInitTolerantTransport<T> {
+    fn new(inner: T) -> Self {
+        Self {
+            inner,
+            initialized: false,
+        }
+    }
+}
+
+impl<T> rmcp::transport::Transport<rmcp::RoleServer> for PreInitTolerantTransport<T>
+where
+    T: rmcp::transport::Transport<rmcp::RoleServer>,
+{
+    type Error = T::Error;
+
+    fn send(
+        &mut self,
+        item: rmcp::model::ServerJsonRpcMessage,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send + 'static {
+        self.inner.send(item)
+    }
+
+    async fn receive(&mut self) -> Option<rmcp::model::ClientJsonRpcMessage> {
+        loop {
+            let msg = self.inner.receive().await?;
+            if !self.initialized
+                && let rmcp::model::ClientJsonRpcMessage::Request(req) = &msg
+            {
+                match &req.request {
+                    rmcp::model::ClientRequest::InitializeRequest(_) => {
+                        self.initialized = true;
+                        return Some(msg);
+                    }
+                    rmcp::model::ClientRequest::PingRequest(_) => {
+                        return Some(msg);
+                    }
+                    _ => {
+                        let err = ErrorData::new(
+                            rmcp::model::ErrorCode::METHOD_NOT_FOUND,
+                            "Method not found",
+                            None,
+                        );
+                        let _ = self
+                            .inner
+                            .send(rmcp::model::ServerJsonRpcMessage::error(
+                                err,
+                                req.id.clone(),
+                            ))
+                            .await;
+                        continue;
+                    }
+                }
+            }
+            return Some(msg);
+        }
+    }
+
+    fn close(&mut self) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
+        self.inner.close()
+    }
+}
+
 #[derive(Clone)]
 pub struct MempalMcpServer {
     db_path: PathBuf,
@@ -141,7 +208,23 @@ impl MempalMcpServer {
     pub async fn serve_stdio(
         self,
     ) -> anyhow::Result<rmcp::service::RunningService<rmcp::RoleServer, Self>> {
-        self.serve(rmcp::transport::stdio())
+        let (stdin, stdout) = rmcp::transport::stdio();
+        self.serve_async_rw(stdin, stdout).await
+    }
+
+    pub async fn serve_async_rw<R, W>(
+        self,
+        read: R,
+        write: W,
+    ) -> anyhow::Result<rmcp::service::RunningService<rmcp::RoleServer, Self>>
+    where
+        R: tokio::io::AsyncRead + Send + Unpin + 'static,
+        W: tokio::io::AsyncWrite + Send + Unpin + 'static,
+    {
+        let transport = PreInitTolerantTransport::new(
+            rmcp::transport::async_rw::AsyncRwTransport::new_server(read, write),
+        );
+        self.serve(transport)
             .await
             .context("failed to initialize MCP stdio transport")
     }
@@ -9061,5 +9144,64 @@ mod tests {
             "rejected push must not create orphan auto/ inbox dir at {}",
             auto_inbox_dir.display()
         );
+    }
+
+    #[tokio::test]
+    async fn test_serve_tolerates_pre_initialize_discover_probe() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        let (_tempdir, _db_path, server) = setup_server();
+        let (mut client_stream, server_stream) = tokio::io::duplex(64 * 1024);
+        let (server_read, server_write) = tokio::io::split(server_stream);
+
+        let serve_handle = tokio::spawn(async move {
+            let service = server
+                .serve_async_rw(server_read, server_write)
+                .await
+                .expect("server should initialize after pre-init probe");
+            let _ = service.waiting().await;
+        });
+
+        let (client_read, mut client_write) = tokio::io::split(&mut client_stream);
+        let mut reader = BufReader::new(client_read);
+
+        // Clients like Antigravity send `server/discover` before `initialize`.
+        client_write
+            .write_all(
+                b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"server/discover\",\"params\":{}}\n",
+            )
+            .await
+            .unwrap();
+        client_write.flush().await.unwrap();
+
+        let mut discover_resp = String::new();
+        reader.read_line(&mut discover_resp).await.unwrap();
+        let discover_json: Value = serde_json::from_str(&discover_resp).unwrap();
+        assert_eq!(discover_json["id"], 1);
+        assert_eq!(discover_json["error"]["code"], -32601);
+
+        // Follow up with standard `initialize` + `notifications/initialized`.
+        client_write
+            .write_all(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"antigravity-test\",\"version\":\"1.0\"}}}\n")
+            .await
+            .unwrap();
+        client_write.flush().await.unwrap();
+
+        let mut init_resp = String::new();
+        reader.read_line(&mut init_resp).await.unwrap();
+        let init_json: Value = serde_json::from_str(&init_resp).unwrap();
+        assert_eq!(init_json["id"], 2);
+        assert_eq!(init_json["result"]["protocolVersion"], "2024-11-05");
+
+        client_write
+            .write_all(b"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n")
+            .await
+            .unwrap();
+        client_write.flush().await.unwrap();
+        drop(client_write);
+        drop(reader);
+        drop(client_stream);
+
+        serve_handle.await.unwrap();
     }
 }
